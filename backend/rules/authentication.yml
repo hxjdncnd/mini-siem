@@ -1,0 +1,86 @@
+# Rules over AUTH events (sshd logins, sudo).
+
+- id: ssh-brute-force
+  name: SSH brute force
+  description: Many failed SSH logins from one address in a short time.
+  severity: high
+  type: threshold
+  match:
+    action: LOGIN_FAILURE
+  group_by: [src_ip]
+  window_seconds: 60
+  threshold: 5
+  summary: "{count} failed SSH logins from {src_ip}"
+  mitre: T1110.001
+
+- id: ssh-brute-force-success
+  name: Successful login after brute force
+  description: >
+    An address that had been failing logins repeatedly then got in. Either the guessing worked
+    or someone finally remembered their password; both are worth a look.
+  severity: critical
+  type: sequence
+  match:
+    action: [LOGIN_FAILURE, INVALID_USER]
+  then:
+    action: LOGIN_SUCCESS
+  group_by: [src_ip]
+  threshold: 5
+  within_seconds: 600
+  summary: "{src_ip} logged in successfully after repeated failures"
+  mitre: T1110
+
+- id: password-spray
+  name: Password spraying
+  description: One address trying many different usernames, the pattern of testing one common password everywhere.
+  severity: high
+  type: distinct
+  match:
+    action: [LOGIN_FAILURE, INVALID_USER]
+  group_by: [src_ip]
+  distinct_field: username
+  window_seconds: 300
+  threshold: 5
+  summary: "{src_ip} tried logins for many different usernames"
+  mitre: T1110.003
+
+- id: login-from-many-addresses
+  name: Account used from many addresses
+  description: One account logging in successfully from several different addresses within an hour.
+  severity: medium
+  type: distinct
+  match:
+    action: LOGIN_SUCCESS
+  group_by: [username]
+  distinct_field: src_ip
+  window_seconds: 3600
+  threshold: 3
+  summary: "Account {username} logged in from several different addresses"
+  mitre: T1078
+
+- id: root-ssh-login
+  name: Direct root login over SSH
+  description: Root logged in directly over SSH instead of a named user escalating with sudo.
+  severity: medium
+  type: match
+  match:
+    action: LOGIN_SUCCESS
+    username: root
+  group_by: [host, src_ip]
+  suppress_seconds: 3600
+  summary: "Direct root SSH login to {host} from {src_ip}"
+  mitre: T1078.003
+
+- id: sudo-sensitive-command
+  name: Sensitive command run with sudo
+  description: sudo used on credential files, account management, setuid bits or reverse shells.
+  severity: high
+  type: match
+  match:
+    action: SUDO_COMMAND
+    raw:
+      regex: 'COMMAND=.*(/etc/shadow|/etc/sudoers|visudo|useradd|usermod|adduser|chmod\s+[ug]?\+s|nc\s+-e|bash\s+-i|authorized_keys)'
+  group_by: [host, username]
+  suppress_seconds: 900
+  summary: "{username} ran a sensitive command with sudo on {host}"
+  mitre: T1548.003

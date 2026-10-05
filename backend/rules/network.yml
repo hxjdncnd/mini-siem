@@ -1,0 +1,15 @@
+# Rules over FIREWALL events.
+
+- id: port-scan
+  name: Port scan
+  description: One address hitting many different blocked ports in a short time.
+  severity: medium
+  type: distinct
+  match:
+    action: CONN_BLOCKED
+  group_by: [src_ip]
+  distinct_field: dst_port
+  window_seconds: 60
+  threshold: 10
+  summary: "{src_ip} probed many different ports"
+  mitre: T1046
