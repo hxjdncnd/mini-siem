@@ -1,0 +1,10 @@
+Oct  5 14:02:09 web01 sshd[812]: Invalid user admin from 203.0.113.50 port 51122
+Oct  5 14:02:11 web01 sshd[812]: Failed password for invalid user admin from 203.0.113.50 port 51122 ssh2
+Oct  5 14:02:13 web01 sshd[814]: Failed password for root from 203.0.113.50 port 51140 ssh2
+Oct  5 14:02:15 web01 sshd[816]: Failed password for root from 203.0.113.50 port 51158 ssh2
+Oct  5 14:02:17 web01 sshd[818]: Failed password for root from 203.0.113.50 port 51171 ssh2
+Oct  5 14:02:19 web01 sshd[820]: Failed password for root from 203.0.113.50 port 51190 ssh2
+Oct  5 14:05:40 web01 sshd[901]: Accepted publickey for harshil from 198.51.100.7 port 60022 ssh2: ED25519 SHA256:abc123
+Oct  5 14:05:41 web01 sshd[901]: pam_unix(sshd:session): session opened for user harshil(uid=1000) by (uid=0)
+Oct  5 14:06:02 web01 sudo:  harshil : TTY=pts/0 ; PWD=/home/harshil ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Oct  5 14:09:30 web01 sshd[955]: Accepted password for root from 203.0.113.50 port 51502 ssh2

@@ -1,0 +1,7 @@
+198.51.100.7 - - [05/Oct/2026:14:10:01 +0000] "GET / HTTP/1.1" 200 5120 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)"
+198.51.100.7 - - [05/Oct/2026:14:10:02 +0000] "GET /static/app.css HTTP/1.1" 200 1840 "https://example.test/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)"
+203.0.113.77 - - [05/Oct/2026:14:11:15 +0000] "GET /wp-login.php HTTP/1.1" 404 162 "-" "Mozilla/5.0 zgrab/0.x"
+203.0.113.77 - - [05/Oct/2026:14:11:15 +0000] "GET /.env HTTP/1.1" 404 162 "-" "Mozilla/5.0 zgrab/0.x"
+203.0.113.77 - - [05/Oct/2026:14:11:16 +0000] "GET /phpmyadmin/ HTTP/1.1" 404 162 "-" "Mozilla/5.0 zgrab/0.x"
+203.0.113.77 - - [05/Oct/2026:14:11:16 +0000] "GET /search?q=1%27%20OR%20%271%27=%271 HTTP/1.1" 500 0 "-" "sqlmap/1.8"
+198.51.100.7 - alice [05/Oct/2026:14:12:40 +0000] "POST /api/login HTTP/1.1" 200 96 "https://example.test/login" "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5)"
