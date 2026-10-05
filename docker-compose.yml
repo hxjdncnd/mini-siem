@@ -1,0 +1,30 @@
+# One command for the full stack:  docker compose up --build
+# Backend: http://localhost:8000   API docs: http://localhost:8000/docs
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: minisiem
+      POSTGRES_USER: minisiem
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-minisiem}   # local-demo default; set a real one in .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minisiem -d minisiem"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      MINISIEM_DATABASE_URL: postgresql+psycopg://minisiem:${POSTGRES_PASSWORD:-minisiem}@db:5432/minisiem
+      MINISIEM_API_KEY: ${MINISIEM_API_KEY:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
