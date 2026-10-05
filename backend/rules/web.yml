@@ -1,0 +1,57 @@
+# Rules over WEB events (access logs).
+
+- id: web-sql-injection
+  name: SQL injection attempt
+  description: Request path or query string contains SQL injection syntax.
+  severity: high
+  type: match
+  match:
+    action: HTTP_REQUEST
+    http_path:
+      regex: "(union\\s+(all\\s+)?select|'\\s*or\\s*'?\\d+'?\\s*=\\s*'?\\d+|\\bor\\s+\\d+\\s*=\\s*\\d+|sleep\\s*\\(|benchmark\\s*\\(|information_schema|;\\s*drop\\s+table)"
+  group_by: [src_ip]
+  suppress_seconds: 600
+  summary: "SQL injection attempts from {src_ip} ({count} requests)"
+  mitre: T1190
+
+- id: web-path-traversal
+  name: Path traversal or sensitive file probe
+  description: Request tries to climb out of the web root or fetch files that should never be served.
+  severity: high
+  type: match
+  match:
+    action: HTTP_REQUEST
+    http_path:
+      regex: '(\.\./|\.\.\\|/etc/passwd|/\.env($|\?)|/\.git/|/\.aws/|/id_rsa)'
+  group_by: [src_ip]
+  suppress_seconds: 600
+  summary: "{src_ip} probed for sensitive files ({count} requests)"
+  mitre: T1083
+
+- id: web-scanner-user-agent
+  name: Known scanning tool
+  description: The client identifies itself as an attack or scanning tool.
+  severity: low
+  type: match
+  match:
+    action: HTTP_REQUEST
+    user_agent:
+      regex: '(sqlmap|nikto|nmap|masscan|zgrab|gobuster|dirbuster|wpscan|hydra|nuclei)'
+  group_by: [src_ip]
+  suppress_seconds: 600
+  summary: "{src_ip} is using a known scanning tool ({count} requests)"
+  mitre: T1595.002
+
+- id: web-content-discovery
+  name: Web content discovery
+  description: A burst of not-found and forbidden responses to one address, typical of directory brute forcing.
+  severity: medium
+  type: threshold
+  match:
+    action: HTTP_REQUEST
+    http_status: [401, 403, 404]
+  group_by: [src_ip]
+  window_seconds: 60
+  threshold: 15
+  summary: "{count} not-found or forbidden requests from {src_ip}"
+  mitre: T1595.003
