@@ -37,3 +37,23 @@ jobs:
         run: pytest -q
         env:
           MINISIEM_TEST_DATABASE_URL: postgresql+psycopg://minisiem:minisiem@localhost:5432/minisiem_test
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      - name: Build
+        run: npm run build
