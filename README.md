@@ -4,7 +4,7 @@ A small security information and event management (SIEM) platform. It ingests ra
 logs, normalizes them into one event schema, runs detection rules over them, and raises
 deduplicated, severity-scored alerts with the evidence attached.
 
-Status: the backend is complete and tested. The web dashboard is the next milestone.
+Status: complete. A tested FastAPI backend and a React dashboard on top of it.
 
 ## What it does
 
@@ -17,6 +17,8 @@ Status: the backend is complete and tested. The web dashboard is the next milest
 - **Raises alerts** that group an ongoing attack into one alert instead of hundreds, carry a
   0-100 risk score, link to the exact events that triggered them, and move through a triage
   workflow (open, acknowledged, resolved, false positive).
+- **Shows it in a dashboard**: an overview with an event timeline and top attackers, a filterable
+  alert queue with an evidence drawer and triage controls, a searchable event log, and the rule list.
 - **Simulates attacks** so there is always something to detect: 11 scenarios generate
   realistic log traffic and send it through the full pipeline.
 
@@ -29,7 +31,7 @@ flowchart LR
     R[YAML rules] --> E
     E -->|alerts + evidence| DB
     DB --> A[Query API<br/>events / alerts / stats]
-    A --> D[Dashboard<br/>next milestone]
+    A --> D[React dashboard<br/>overview / alerts / events / rules]
 ```
 
 ## Quick start
@@ -53,6 +55,8 @@ Data goes to `backend/minisiem.db`; delete that file to start over.
 ```bash
 docker compose up --build
 ```
+
+The dashboard is at <http://localhost:8080> and the API at <http://localhost:8000>.
 
 ### See it detect something
 
@@ -83,6 +87,30 @@ runs only the ones you name. You can also send a real log file:
 curl -X POST --data-binary @samples/auth.log -H "Content-Type: text/plain" \
      http://localhost:8000/api/v1/ingest/sshd
 ```
+
+## Dashboard
+
+The dashboard lives in `frontend/` (React, TypeScript, Vite). With the backend running on port 8000:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open <http://localhost:5173>. Vite forwards `/api` to the backend, so there is nothing to configure; set
+`VITE_BACKEND_URL` if the backend is not on `localhost:8000`. If you set `MINISIEM_API_KEY`, enter the
+same value under **API key** in the sidebar.
+
+| Page | What it is for |
+| --- | --- |
+| Overview | Event and alert counts, an event timeline, alerts by severity and rule, top source addresses, and the highest-risk active alerts. Pick a time range from 1 hour to 30 days; it refreshes every 15 seconds. |
+| Alerts | The triage queue. Filter by status, severity, rule and source address. Click an alert to see its evidence (the raw log lines that triggered it), acknowledge, resolve or mark it a false positive, and leave a note. |
+| Events | Search every normalized event by source, action, address, user or text in the raw line. Click a row to see the original log line. |
+| Rules | Each loaded rule in plain language, its MITRE ATT&CK technique, and how many alerts it has raised. |
+
+Filters live in the URL, so a filtered view can be bookmarked or shared, and the charts link into the matching
+alert or event lists.
 
 ## API
 
@@ -160,6 +188,15 @@ deduplication and triage, and each simulator scenario (asserting it trips exactl
 claims to). To run the suite against PostgreSQL, set `MINISIEM_TEST_DATABASE_URL`. CI runs
 lint plus both database runs on every push.
 
+The dashboard has its own tests: unit tests for the formatting helpers, and component tests that render the real
+pages against mocked API responses and click through the triage flow.
+
+```bash
+cd frontend
+npm test
+npm run typecheck
+```
+
 ## Configuration
 
 Environment variables, or a `.env` file (see `.env.example`):
@@ -178,7 +215,8 @@ Environment variables, or a `.env` file (see `.env.example`):
 - Ingesting the same log file twice stores its events twice; there is no duplicate detection.
 - Detection runs inline with ingestion, which is simple and consistent but ties ingest speed
   to rule cost. A queue between the two would be the next step at higher volume.
-- One shared API key, no user accounts or roles.
+- One shared API key, no user accounts or roles. The dashboard keeps the key in the browser's local storage.
+- The dashboard polls every 15 seconds; there is no live push.
 - The schema is created at startup with no migration tool.
 - No geo-IP data, so there is no "impossible travel" rule; `login-from-many-addresses` covers
   the nearest case.
@@ -195,6 +233,11 @@ backend/
     models.py     database tables
   rules/          detection rules (YAML)
   tests/
+frontend/         React + TypeScript dashboard (Vite), served by nginx in Docker
+  src/
+    pages/        Overview, Alerts (with the evidence drawer), Events, Rules
+    components/   layout, badges, charts, pagination
+    api/          typed client that mirrors the backend schemas
 simulator/        attack scenario generator (standard library only)
 samples/          small example log files
 ```
