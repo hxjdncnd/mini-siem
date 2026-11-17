@@ -1,7 +1,7 @@
 """Shapes of the JSON the API accepts and returns."""
 
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -191,3 +191,29 @@ class StatsSummary(BaseModel):
     alerts_by_rule: list[CountBy]
 
     model_config = {"populate_by_name": True}
+
+
+class IpClassification(BaseModel):
+    kind: Literal["public", "private", "loopback", "link_local", "multicast", "documentation", "reserved"]
+    label: str
+    internal: bool = Field(description="True for addresses that never leave a private network")
+
+
+class IpProfile(BaseModel):
+    """Everything seen from one source address."""
+
+    ip: str
+    classification: IpClassification
+    event_count: int
+    first_seen: datetime | None
+    last_seen: datetime | None
+    hosts: list[CountBy] = Field(description="Machines this address talked to")
+    actions: list[CountBy]
+    usernames: list[CountBy] = Field(description="Accounts it tried or used")
+    http_paths: list[CountBy]
+    dst_ports: list[CountBy]
+    events_over_time: list[TimeBucket]
+    bucket_seconds: int
+    alerts: list[AlertOut] = Field(description="Alerts raised about this address, highest risk first (max 50)")
+    max_score: int = Field(description="Highest alert risk score, 0 if it has none")
+    recent_events: list[EventOut] = Field(description="Latest 20 events, newest first")

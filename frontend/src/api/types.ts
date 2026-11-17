@@ -129,3 +129,41 @@ export interface Health {
   status: string;
   rules: number;
 }
+
+export type IpKind = "public" | "private" | "loopback" | "link_local" | "multicast" | "documentation" | "reserved";
+
+export interface IpClassification {
+  kind: IpKind;
+  label: string;
+  internal: boolean;
+}
+
+export interface IpProfile {
+  ip: string;
+  classification: IpClassification;
+  event_count: number;
+  first_seen: string | null;
+  last_seen: string | null;
+  hosts: CountBy[];
+  actions: CountBy[];
+  usernames: CountBy[];
+  http_paths: CountBy[];
+  dst_ports: CountBy[];
+  events_over_time: TimeBucket[];
+  bucket_seconds: number;
+  alerts: Alert[];
+  max_score: number;
+  recent_events: LogEvent[];
+}
+
+export type LogFormat = "sshd" | "nginx" | "firewall";
+
+export interface IngestResult {
+  received: number;
+  stored: number;
+  skipped: number;
+  failed: number;
+  errors: { line: number; reason: string }[];
+  alerts_created: number;
+  alerts_updated: number;
+}

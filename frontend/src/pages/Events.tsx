@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { api } from "../api/client";
 import { ACTIONS, SOURCE_TYPES } from "../api/types";
+import { IpLink } from "../components/IpLink";
 import { PageHeader } from "../components/Layout";
 import { Pagination } from "../components/Pagination";
 import { Empty, ErrorState, Loading } from "../components/States";
@@ -113,7 +114,7 @@ export function Events() {
                         <td className="nowrap">{humanize(event.source_type)}</td>
                         <td className="nowrap">{humanize(event.action)}</td>
                         <td className="mono">{event.host ?? "-"}</td>
-                        <td className="mono">{event.src_ip ?? "-"}</td>
+                        <td className="mono">{event.src_ip ? <IpLink ip={event.src_ip} /> : "-"}</td>
                         <td className="mono">{event.username ?? "-"}</td>
                         <td className="mono">{describeEvent(event)}</td>
                       </tr>

@@ -73,5 +73,7 @@ export function hoursAgoIso(hours: number, now: number = Date.now()): string {
 export function formatBucketLabel(iso: string, bucketSeconds: number): string {
   const date = new Date(iso);
   if (bucketSeconds >= 86400) return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  // Sub-minute buckets need seconds, otherwise every tick on the axis reads the same.
+  const seconds = bucketSeconds < 60 ? { second: "2-digit" as const } : {};
+  return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", ...seconds, hour12: false });
 }

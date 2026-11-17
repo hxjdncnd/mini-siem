@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api/client";
 import { SEVERITIES, type Severity } from "../api/types";
 import { SeverityBadge, ScoreBar } from "../components/Badges";
 import { BarList } from "../components/BarList";
+import { EventsChart } from "../components/EventsChart";
 import { Kpi } from "../components/Kpi";
 import { PageHeader } from "../components/Layout";
 import { Empty, ErrorState, Loading } from "../components/States";
 import { useAsync } from "../hooks/useAsync";
-import { formatBucketLabel, formatDateTime, formatDuration, formatNumber, hoursAgoIso, humanize, timeAgo } from "../lib/format";
+import { formatDuration, formatNumber, hoursAgoIso, humanize, timeAgo } from "../lib/format";
 
 const RANGES = [
   { label: "1h", hours: 1 },
@@ -62,39 +62,7 @@ export function Overview() {
                 <h2>Events over time</h2>
                 <span className="muted small">one bar = {formatDuration(data.bucket_seconds)}</span>
               </div>
-              <div className="chart">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart
-                    data={data.events_over_time.map((b) => ({
-                      start: b.start,
-                      label: formatBucketLabel(b.start, data.bucket_seconds),
-                      count: b.count,
-                    }))}
-                    margin={{ top: 6, right: 8, bottom: 0, left: -12 }}
-                  >
-                    <defs>
-                      <linearGradient id="events-fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#4cc9a7" stopOpacity={0.45} />
-                        <stop offset="100%" stopColor="#4cc9a7" stopOpacity={0.02} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid stroke="#1d2a45" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fill: "#8794b0", fontSize: 11.5 }} tickLine={false} axisLine={{ stroke: "#22304d" }} minTickGap={32} />
-                    <YAxis tick={{ fill: "#8794b0", fontSize: 11.5 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                    <Tooltip
-                      contentStyle={{ background: "#0b1120", border: "1px solid #22304d", borderRadius: 8, fontSize: 12.5 }}
-                      labelStyle={{ color: "#8794b0" }}
-                      itemStyle={{ color: "#e5eaf5" }}
-                      labelFormatter={(_, payload) => {
-                        const start = payload?.[0]?.payload?.start;
-                        return start ? formatDateTime(start) : "";
-                      }}
-                      formatter={(value) => [formatNumber(Number(value)), "Events"]}
-                    />
-                    <Area type="monotone" dataKey="count" stroke="#4cc9a7" strokeWidth={2} fill="url(#events-fill)" isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
+              <EventsChart buckets={data.events_over_time} bucketSeconds={data.bucket_seconds} />
             </section>
 
             <section className="card">
@@ -130,7 +98,7 @@ export function Overview() {
           <div className="grid-3">
             <section className="card">
               <h2>Top source addresses</h2>
-              <BarList items={data.top_source_ips} to={(ip) => `/events?src_ip=${encodeURIComponent(ip)}`} />
+              <BarList items={data.top_source_ips} to={(ip) => `/ips/${encodeURIComponent(ip)}`} />
             </section>
             <section className="card">
               <h2>Events by source</h2>

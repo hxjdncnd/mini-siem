@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import type { AlertStatus } from "../api/types";
 import { ScoreBar, SeverityBadge, StatusBadge } from "../components/Badges";
 import { Drawer } from "../components/Drawer";
+import { IpLink } from "../components/IpLink";
 import { ErrorState, Loading } from "../components/States";
 import { useAsync } from "../hooks/useAsync";
 import { describeEvent, formatDateTime, formatNumber, humanize, mitreUrl } from "../lib/format";
@@ -81,7 +82,7 @@ export function AlertDrawer({ id, onClose, onChanged }: { id: string; onClose: (
             </div>
             <div>
               <dt>Source IP</dt>
-              <dd className="mono">{alert.src_ip ?? "-"}</dd>
+              <dd className="mono">{alert.src_ip ? <IpLink ip={alert.src_ip} /> : "-"}</dd>
             </div>
             <div>
               <dt>User</dt>

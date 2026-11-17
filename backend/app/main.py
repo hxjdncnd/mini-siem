@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api import alerts, events, ingest, overview
+from app.api import alerts, entities, events, ingest, overview
 from app.api.deps import require_api_key
 from app.config import Settings
 from app.db import create_schema, make_engine, make_session_factory
@@ -48,7 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
-    for module in (ingest, events, alerts, overview):
+    for module in (ingest, events, alerts, entities, overview):
         api.include_router(module.router)
     app.include_router(api)
 

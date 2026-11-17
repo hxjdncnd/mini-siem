@@ -10,7 +10,7 @@ from app.api.deps import SessionDep, as_utc
 from app.enums import ACTIVE_STATUSES
 from app.models import Alert, LogEvent
 from app.schemas import CountBy, RuleOut, StatsSummary, TimeBucket
-from app.timeutil import from_ms, to_ms
+from app.timeutil import auto_bucket, from_ms, to_ms
 
 router = APIRouter(tags=["overview"])
 
@@ -50,7 +50,7 @@ def stats_summary(
     lo, hi = to_ms(start), to_ms(end)
     span_seconds = max(1, (hi - lo) // 1000)
     if bucket_seconds is None:
-        bucket_seconds = _auto_bucket(span_seconds)
+        bucket_seconds = auto_bucket(span_seconds)
     elif span_seconds / bucket_seconds > _MAX_BUCKETS:
         raise HTTPException(
             status_code=400, detail=f"bucket_seconds too small for this range (max {_MAX_BUCKETS} buckets)"
@@ -100,11 +100,3 @@ def stats_summary(
         alerts_by_status=by_status,
         alerts_by_rule=alert_counts(Alert.rule_id),
     )
-
-
-def _auto_bucket(span_seconds: int) -> int:
-    """Smallest "nice" bucket that keeps the timeline at 60 points or fewer."""
-    for size in (10, 30, 60, 300, 900, 1800, 3600, 3 * 3600, 6 * 3600, 86400, 7 * 86400):
-        if span_seconds / size <= 60:
-            return size
-    return -(-span_seconds // 60)

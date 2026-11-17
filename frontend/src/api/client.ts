@@ -1,4 +1,16 @@
-import type { Alert, AlertDetail, AlertUpdate, Health, LogEvent, Page, Rule, StatsSummary } from "./types";
+import type {
+  Alert,
+  AlertDetail,
+  AlertUpdate,
+  Health,
+  IngestResult,
+  IpProfile,
+  LogEvent,
+  LogFormat,
+  Page,
+  Rule,
+  StatsSummary,
+} from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
 const KEY_STORAGE = "minisiem.apiKey";
@@ -47,7 +59,7 @@ async function request<T>(url: string, init: RequestInit = {}, signal?: AbortSig
   const headers = new Headers(init.headers);
   const key = getApiKey();
   if (key) headers.set("X-API-Key", key);
-  if (init.body) headers.set("Content-Type", "application/json");
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   let response: Response;
   try {
@@ -107,4 +119,12 @@ export const api = {
     request<Alert>(`${BASE}/alerts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(update) }),
   events: (filters: EventFilters, signal?: AbortSignal) => get<Page<LogEvent>>("/events", { ...filters }, signal),
   rules: (signal?: AbortSignal) => get<Rule[]>("/rules", {}, signal),
+  ip: (ip: string, signal?: AbortSignal) => get<IpProfile>(`/ips/${encodeURIComponent(ip)}`, {}, signal),
+  /** Sends raw log text through the same parsers and detection rules as live traffic. */
+  ingest: (format: LogFormat, text: string, host?: string) =>
+    request<IngestResult>(`${BASE}/ingest/${format}${toQuery({ host })}`, {
+      method: "POST",
+      body: text,
+      headers: { "Content-Type": "text/plain" },
+    }),
 };

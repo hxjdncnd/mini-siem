@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api, getApiKey, setApiKey } from "../api/client";
 import { useAsync } from "../hooks/useAsync";
 
@@ -7,6 +7,7 @@ const NAV = [
   { to: "/", label: "Overview", end: true },
   { to: "/alerts", label: "Alerts" },
   { to: "/events", label: "Events" },
+  { to: "/upload", label: "Upload" },
   { to: "/rules", label: "Rules" },
 ];
 
@@ -15,6 +16,8 @@ export function Layout() {
   const open = useAsync((signal) => api.alerts({ active: true, size: 1 }, signal), [], 15_000);
   const [editingKey, setEditingKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState(getApiKey());
+  const [lookup, setLookup] = useState("");
+  const navigate = useNavigate();
 
   const online = health.data?.status === "ok";
   const openCount = open.data?.total ?? 0;
@@ -51,6 +54,29 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        <form
+          className="lookup"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const address = lookup.trim();
+            if (!address) return;
+            navigate(`/ips/${encodeURIComponent(address)}`);
+            setLookup("");
+          }}
+        >
+          <label className="small muted" htmlFor="ip-lookup">
+            Investigate an IP
+          </label>
+          <input
+            id="ip-lookup"
+            value={lookup}
+            onChange={(event) => setLookup(event.target.value)}
+            placeholder="203.0.113.50"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </form>
 
         <div className="sidebar-foot">
           <div className="status-line">

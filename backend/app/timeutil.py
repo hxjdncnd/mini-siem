@@ -15,3 +15,11 @@ def from_ms(ms: int) -> datetime:
 
 def now_ms() -> int:
     return to_ms(datetime.now(UTC))
+
+
+def auto_bucket(span_seconds: int) -> int:
+    """Smallest "nice" bucket that keeps a timeline at 60 points or fewer."""
+    for size in (10, 30, 60, 300, 900, 1800, 3600, 3 * 3600, 6 * 3600, 86400, 7 * 86400):
+        if span_seconds / size <= 60:
+            return size
+    return -(-span_seconds // 60)

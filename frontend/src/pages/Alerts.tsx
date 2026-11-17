@@ -4,6 +4,7 @@ import { ScoreBar, SeverityBadge, StatusBadge } from "../components/Badges";
 import { PageHeader } from "../components/Layout";
 import { Pagination } from "../components/Pagination";
 import { Empty, ErrorState, Loading } from "../components/States";
+import { IpLink } from "../components/IpLink";
 import { TextFilter } from "../components/TextFilter";
 import { useAsync } from "../hooks/useAsync";
 import { useFilters } from "../hooks/useFilters";
@@ -137,7 +138,7 @@ export function Alerts() {
                       <div className="cell-sub">{alert.summary}</div>
                     </td>
                     <td className="mono">
-                      {alert.src_ip ?? alert.username ?? alert.host ?? "-"}
+                      {alert.src_ip ? <IpLink ip={alert.src_ip} /> : (alert.username ?? alert.host ?? "-")}
                       {alert.src_ip && alert.username && <div className="cell-sub">user {alert.username}</div>}
                     </td>
                     <td>

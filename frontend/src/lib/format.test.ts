@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LogEvent } from "../api/types";
 import { toQuery } from "../api/client";
-import { describeEvent, formatDuration, hoursAgoIso, humanize, mitreUrl, timeAgo } from "./format";
+import { describeEvent, formatBucketLabel, formatDuration, hoursAgoIso, humanize, mitreUrl, timeAgo } from "./format";
 
 const base: LogEvent = {
   id: "1",
@@ -89,5 +89,15 @@ describe("toQuery", () => {
   it("drops empty values and keeps the rest", () => {
     expect(toQuery({ a: "x", b: "", c: undefined, d: 0, e: false })).toBe("?a=x&d=0&e=false");
     expect(toQuery({})).toBe("");
+  });
+});
+
+describe("formatBucketLabel", () => {
+  const iso = "2026-11-17T02:12:37Z";
+  it("includes seconds for sub-minute buckets so ticks stay distinguishable", () => {
+    expect(formatBucketLabel(iso, 10)).toMatch(/\d\d:\d\d:\d\d/);
+  });
+  it("shows only hours and minutes for minute-scale buckets", () => {
+    expect(formatBucketLabel(iso, 300)).toMatch(/^\d\d:\d\d$/);
   });
 });

@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Alert, AlertDetail, LogEvent, Rule, StatsSummary } from "./api/types";
+import type { Alert, AlertDetail, IpProfile, LogEvent, Rule, StatsSummary } from "./api/types";
 import { App } from "./App";
 
 const alert: Alert = {
@@ -85,6 +85,24 @@ const stats: StatsSummary = {
   alerts_by_rule: [{ key: "ssh-brute-force", count: 3 }],
 };
 
+const ipProfile: IpProfile = {
+  ip: "203.0.113.50",
+  classification: { kind: "documentation", label: "Reserved for documentation", internal: false },
+  event_count: 7,
+  first_seen: "2026-11-16T19:00:00Z",
+  last_seen: "2026-11-16T19:05:00Z",
+  hosts: [{ key: "web01", count: 7 }],
+  actions: [{ key: "LOGIN_FAILURE", count: 7 }],
+  usernames: [{ key: "admin", count: 4 }],
+  http_paths: [],
+  dst_ports: [],
+  events_over_time: [{ start: "2026-11-16T19:00:00Z", count: 7 }],
+  bucket_seconds: 10,
+  alerts: [alert],
+  max_score: 76,
+  recent_events: [event],
+};
+
 const page = <T,>(items: T[]) => ({ items, total: items.length, page: 0, size: 50 });
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -96,6 +114,11 @@ function defaultRespond(url: URL, method: string): Response {
   const path = url.pathname;
   if (path === "/health") return json({ status: "ok", rules: 11 });
   if (path === "/api/v1/stats/summary") return json(stats);
+  if (path === "/api/v1/ips/203.0.113.50") return json(ipProfile);
+  if (path.startsWith("/api/v1/ips/")) return json({ detail: "No activity" }, 404);
+  if (path.startsWith("/api/v1/ingest/")) {
+    return json({ received: 15, stored: 15, skipped: 0, failed: 0, errors: [], alerts_created: 2, alerts_updated: 0 });
+  }
   if (path === "/api/v1/rules") return json([rule]);
   if (path === "/api/v1/events") return json(page([event]));
   if (path === "/api/v1/alerts/alert-1") {
@@ -217,5 +240,51 @@ describe("Rules", () => {
   it("describes a sequence rule that has no window", async () => {
     renderAt("/rules");
     expect(await screen.findByText("5 matching events, then a follow-up event within 10 min")).toBeTruthy();
+  });
+});
+
+describe("IP investigation", () => {
+  it("shows what an address did, its alerts and its latest events", async () => {
+    renderAt("/ips/203.0.113.50");
+    expect(await screen.findByText("Reserved for documentation")).toBeTruthy();
+    expect(screen.getByText("Accounts it tried")).toBeTruthy();
+    expect(screen.getByText("admin")).toBeTruthy();
+    expect(screen.getByText("SSH brute force")).toBeTruthy();
+    expect(screen.getByText(/Failed password for root|user root/)).toBeTruthy();
+  });
+
+  it("says so when the address has never been seen", async () => {
+    renderAt("/ips/198.51.100.7");
+    expect(await screen.findByText(/No activity from 198\.51\.100\.7/)).toBeTruthy();
+  });
+
+  it("is reachable from the lookup box and from addresses in the alert list", async () => {
+    const user = userEvent.setup();
+    renderAt("/alerts");
+    await user.type(await screen.findByLabelText("Investigate an IP"), "203.0.113.50{Enter}");
+    expect(await screen.findByText("Reserved for documentation")).toBeTruthy();
+  });
+});
+
+describe("Upload", () => {
+  it("detects the format, uploads the file and reports what the rules found", async () => {
+    const user = userEvent.setup();
+    renderAt("/upload");
+    await user.click(await screen.findByRole("button", { name: "Try a sample SSH attack" }));
+    expect(await screen.findByText(/Auto-detect: SSH and sudo/)).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Upload and analyze" }));
+    expect(await screen.findByText(/2 new alerts/)).toBeTruthy();
+    const post = calls.find((c) => c.method === "POST");
+    expect(post?.url).toBe("/api/v1/ingest/sshd");
+    expect(post?.body).toContain("Failed password");
+  });
+
+  it("will not upload when the format cannot be told", async () => {
+    const user = userEvent.setup();
+    renderAt("/upload");
+    const input = await screen.findByLabelText("Log file");
+    await user.upload(input, new File(["hello\nworld\n"], "mystery.txt", { type: "text/plain" }));
+    expect(await screen.findByText(/Could not tell what kind of log/)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Upload and analyze" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

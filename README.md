@@ -15,6 +15,8 @@ Status: complete. A tested FastAPI backend and a React dashboard on top of it.
 ![One alert with its MITRE technique, triage buttons, analyst note and the raw log lines that triggered it](docs/alert-detail.png)
 ![Searchable event log](docs/events.png)
 ![Detection rules in plain language](docs/rules.png)
+![Investigation page for one address: what it did, which alerts it caused, its latest events](docs/ip-detail.png)
+![Uploading a log file and seeing what the detection rules made of it](docs/upload.png)
 
 </details>
 
@@ -119,6 +121,8 @@ same value under **API key** in the sidebar.
 | Overview | Event and alert counts, an event timeline, alerts by severity and rule, top source addresses, and the highest-risk active alerts. Pick a time range from 1 hour to 30 days; it refreshes every 15 seconds. |
 | Alerts | The triage queue. Filter by status, severity, rule and source address. Click an alert to see its evidence (the raw log lines that triggered it), acknowledge, resolve or mark it a false positive, and leave a note. |
 | Events | Search every normalized event by source, action, address, user or text in the raw line. Click a row to see the original log line. |
+| Investigate (`/ips/<address>`) | Everything known about one address: what kind of address it is (public, private, documentation range...), activity over time, the accounts, ports and URL paths it touched, every alert about it and its latest events. Reached by clicking any address, or from the **Investigate an IP** box in the sidebar. |
+| Upload | Drop in an auth.log, an nginx or Apache access log, or a UFW log. The format is detected, the file goes through the same parsers and rules as live traffic, and you see how many events were stored and which alerts were raised. "Try a sample SSH attack" generates a brute force you can investigate straight away. |
 | Rules | Each loaded rule in plain language, its MITRE ATT&CK technique, and how many alerts it has raised. |
 
 Filters live in the URL, so a filtered view can be bookmarked or shared, and the charts link into the matching
@@ -137,6 +141,7 @@ All routes are under `/api/v1`. Full request and response schemas are in the int
 | GET | `/alerts` | List alerts: filter by status, severity, rule, entity; sort by recency or score |
 | GET | `/alerts/{id}` | One alert with its evidence events |
 | PATCH | `/alerts/{id}` | Triage: set status and/or leave a note |
+| GET | `/ips/{ip}` | Profile of one address: classification, activity, accounts, ports and paths touched, alerts and latest events (404 if never seen) |
 | GET | `/rules` | Loaded detection rules with how many alerts each has raised |
 | GET | `/stats/summary` | Counts, top source addresses and an event timeline for a time range |
 | GET | `/health` | Liveness check (outside `/api/v1`, never requires a key) |
@@ -195,7 +200,7 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-91 tests cover the parsers, rule validation, every rule type through the real HTTP API, alert
+106 tests cover the parsers, rule validation, every rule type through the real HTTP API, alert
 deduplication and triage, and each simulator scenario (asserting it trips exactly the rules it
 claims to). To run the suite against PostgreSQL, set `MINISIEM_TEST_DATABASE_URL`. CI runs
 lint plus both database runs on every push.
