@@ -4,6 +4,7 @@ import { ScoreBar, SeverityBadge, StatusBadge } from "../components/Badges";
 import { PageHeader } from "../components/Layout";
 import { Pagination } from "../components/Pagination";
 import { Empty, ErrorState, Loading } from "../components/States";
+import { ExportButton } from "../components/ExportButton";
 import { IpLink } from "../components/IpLink";
 import { TextFilter } from "../components/TextFilter";
 import { useAsync } from "../hooks/useAsync";
@@ -20,21 +21,16 @@ export function Alerts() {
   const page = Math.max(0, Number(filters.page) || 0);
 
   const rules = useAsync((signal) => api.rules(signal), []);
+  const query = {
+    active: filters.status === "active" ? true : undefined,
+    status: filters.status === "active" || filters.status === "all" ? undefined : filters.status,
+    severity: filters.severity,
+    rule_id: filters.rule_id,
+    src_ip: filters.src_ip,
+    sort: filters.sort,
+  };
   const alerts = useAsync(
-    (signal) =>
-      api.alerts(
-        {
-          active: filters.status === "active" ? true : undefined,
-          status: filters.status === "active" || filters.status === "all" ? undefined : filters.status,
-          severity: filters.severity,
-          rule_id: filters.rule_id,
-          src_ip: filters.src_ip,
-          sort: filters.sort,
-          page,
-          size: PAGE_SIZE,
-        },
-        signal,
-      ),
+    (signal) => api.alerts({ ...query, page, size: PAGE_SIZE }, signal),
     [filters.status, filters.severity, filters.rule_id, filters.src_ip, filters.sort, page],
     15_000,
   );
@@ -43,7 +39,11 @@ export function Alerts() {
 
   return (
     <>
-      <PageHeader title="Alerts" subtitle="Detections raised by the rule engine. Click one to see its evidence and triage it." />
+      <PageHeader
+        title="Alerts"
+        subtitle="Detections raised by the rule engine. Click one to see its evidence and triage it."
+        actions={<ExportButton path="/alerts/export.csv" params={query} />}
+      />
 
       <div className="filters">
         <div className="field">

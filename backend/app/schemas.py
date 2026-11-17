@@ -217,3 +217,46 @@ class IpProfile(BaseModel):
     alerts: list[AlertOut] = Field(description="Alerts raised about this address, highest risk first (max 50)")
     max_score: int = Field(description="Highest alert risk score, 0 if it has none")
     recent_events: list[EventOut] = Field(description="Latest 20 events, newest first")
+
+
+class RuleUpdate(BaseModel):
+    enabled: bool
+
+
+class RuleTestFinding(BaseModel):
+    """One alert the rule would have raised."""
+
+    summary: str
+    severity: Severity
+    score: int
+    group_key: str
+    src_ip: str | None
+    username: str | None
+    host: str | None
+    first_seen: datetime
+    last_seen: datetime
+    event_count: int
+
+
+class RuleTestResult(BaseModel):
+    rule_id: str
+    enabled: bool
+    events_scanned: int
+    events_total: int
+    scanned_from: datetime | None
+    scanned_to: datetime | None
+    would_raise: int
+    already_raised: int
+    findings: list[RuleTestFinding]  # the highest-risk ones; would_raise says how many in all
+
+
+class NotificationStatus(BaseModel):
+    enabled: bool
+    min_severity: Severity
+    destination: str | None
+
+
+class NotificationTest(BaseModel):
+    delivered: bool
+    status: int | None
+    error: str | None

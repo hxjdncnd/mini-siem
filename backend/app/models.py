@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -84,3 +84,14 @@ class AlertEvent(Base):
     event_id: Mapped[str] = mapped_column(ForeignKey("log_events.id", ondelete="CASCADE"), primary_key=True)
 
     __table_args__ = (Index("idx_alert_events_event", "event_id"),)
+
+
+class RuleState(Base):
+    """An analyst's decision to switch a rule off or back on. The YAML file stays the source of truth
+    for *what* a rule detects; this table only records whether it is running, so the choice survives a restart."""
+
+    __tablename__ = "rule_states"
+
+    rule_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean)
+    updated_at: Mapped[int] = mapped_column(BigInteger)

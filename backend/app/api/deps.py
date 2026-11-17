@@ -4,7 +4,10 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+
+from app.csvutil import stream_csv
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -45,3 +48,20 @@ def as_utc(value: datetime | None) -> datetime | None:
     if value is not None and value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value
+
+
+EXPORT_MAX_ROWS = 100_000
+
+
+def csv_response(name: str, header, rows, total: int) -> StreamingResponse:
+    """A CSV download. X-Total-Rows lets the caller notice when the export was cut at EXPORT_MAX_ROWS."""
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d")
+    return StreamingResponse(
+        stream_csv(header, rows),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{name}-{stamp}.csv"',
+            "X-Total-Rows": str(total),
+            "X-Exported-Rows": str(min(total, EXPORT_MAX_ROWS)),
+        },
+    )

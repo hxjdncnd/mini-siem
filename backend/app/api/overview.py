@@ -1,31 +1,20 @@
-"""Read-only views for the dashboard: loaded rules and aggregate statistics."""
+"""Read-only views for the dashboard: aggregate statistics."""
 
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import func, select
 
 from app.api.deps import SessionDep, as_utc
 from app.enums import ACTIVE_STATUSES
 from app.models import Alert, LogEvent
-from app.schemas import CountBy, RuleOut, StatsSummary, TimeBucket
+from app.schemas import CountBy, StatsSummary, TimeBucket
 from app.timeutil import auto_bucket, from_ms, to_ms
 
 router = APIRouter(tags=["overview"])
 
 _MAX_BUCKETS = 500
-
-
-@router.get("/rules", response_model=list[RuleOut], summary="Detection rules currently loaded")
-def list_rules(request: Request, session: SessionDep):
-    counts = dict(session.execute(select(Alert.rule_id, func.count()).group_by(Alert.rule_id)).all())
-    return [
-        RuleOut(
-            **rule.model_dump(include=set(RuleOut.model_fields) - {"alert_count"}), alert_count=counts.get(rule.id, 0)
-        )
-        for rule in request.app.state.rules
-    ]
 
 
 @router.get(

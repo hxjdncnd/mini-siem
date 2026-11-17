@@ -167,3 +167,41 @@ export interface IngestResult {
   alerts_created: number;
   alerts_updated: number;
 }
+
+export interface RuleTestFinding {
+  summary: string;
+  severity: Severity;
+  score: number;
+  group_key: string;
+  src_ip: string | null;
+  username: string | null;
+  host: string | null;
+  first_seen: string;
+  last_seen: string;
+  event_count: number;
+}
+
+/** What a dry run of one rule over the stored events found. Nothing is created or changed. */
+export interface RuleTestResult {
+  rule_id: string;
+  enabled: boolean;
+  events_scanned: number;
+  events_total: number;
+  scanned_from: string | null;
+  scanned_to: string | null;
+  would_raise: number;
+  already_raised: number;
+  findings: RuleTestFinding[];
+}
+
+export interface NotificationStatus {
+  enabled: boolean;
+  min_severity: Severity;
+  destination: string | null;
+}
+
+export interface NotificationTest {
+  delivered: boolean;
+  status: number | null;
+  error: string | null;
+}

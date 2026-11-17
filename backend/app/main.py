@@ -3,17 +3,29 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
+from sqlalchemy import select, text
 
-from app.api import alerts, entities, events, ingest, overview
+from app.api import alerts, entities, events, ingest, notifications, overview
+from app.api import rules as rules_api
 from app.api.deps import require_api_key
 from app.config import Settings
 from app.db import create_schema, make_engine, make_session_factory
 from app.detection.engine import DetectionEngine
 from app.detection.rules import load_rules
 from app.ingest import IngestService
+from app.models import RuleState
+from app.notify import Notifier
 
 log = logging.getLogger("minisiem")
+
+
+def _apply_saved_switches(session_factory, rules) -> None:
+    """Re-apply the on/off choices analysts made through the API; a rule file that no longer exists is ignored."""
+    by_id = {rule.id: rule for rule in rules}
+    with session_factory() as session:
+        for state in session.scalars(select(RuleState)):
+            if state.rule_id in by_id:
+                by_id[state.rule_id].enabled = state.enabled
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -29,9 +41,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.settings = settings
         app.state.engine = engine
         app.state.session_factory = make_session_factory(engine)
+        _apply_saved_switches(app.state.session_factory, rules)
         app.state.rules = rules
-        app.state.ingest = IngestService(settings, DetectionEngine(rules))
+        app.state.ingest = IngestService(settings, DetectionEngine(rules), Notifier(settings))
         yield
+        app.state.ingest.notifier.shutdown()
         engine.dispose()
 
     app = FastAPI(
@@ -45,10 +59,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origins=settings.cors_origins,
         allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Content-Type", "X-API-Key"],
+        expose_headers=["Content-Disposition", "X-Total-Rows", "X-Exported-Rows"],
     )
 
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
-    for module in (ingest, events, alerts, entities, overview):
+    for module in (ingest, events, alerts, entities, rules_api, notifications, overview):
         api.include_router(module.router)
     app.include_router(api)
 

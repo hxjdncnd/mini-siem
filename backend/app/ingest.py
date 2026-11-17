@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.detection.engine import DetectionEngine
 from app.models import LogEvent
+from app.notify import Notifier
 from app.parsers import PARSERS, MalformedLine, ParseContext, ParsedEvent
-from app.schemas import EventIn, IngestResult, LineError
+from app.schemas import AlertOut, EventIn, IngestResult, LineError
 from app.timeutil import to_ms
 
 _MAX_REPORTED_ERRORS = 20
@@ -19,9 +20,10 @@ class IngestError(ValueError):
 
 
 class IngestService:
-    def __init__(self, settings: Settings, engine: DetectionEngine):
+    def __init__(self, settings: Settings, engine: DetectionEngine, notifier: Notifier | None = None):
         self.settings = settings
         self.engine = engine
+        self.notifier = notifier or Notifier(settings)
         self.default_tz = ZoneInfo(settings.default_timezone)
 
     def ingest_raw(self, session: Session, log_format: str, body: str, fallback_host: str | None) -> IngestResult:
@@ -80,6 +82,7 @@ class IngestService:
         session.flush()
         outcome = self.engine.evaluate(session, events)
         session.commit()  # events and the alerts they caused land together or not at all
+        self.notifier.alerts_created([AlertOut.of(alert) for alert in outcome.created])  # only once it is durable
         return IngestResult(
             stored=len(events), alerts_created=len(outcome.created), alerts_updated=len(outcome.updated), **counts
         )

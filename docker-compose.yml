@@ -20,6 +20,9 @@ services:
     environment:
       MINISIEM_DATABASE_URL: postgresql+psycopg://minisiem:${POSTGRES_PASSWORD:-minisiem}@db:5432/minisiem
       MINISIEM_API_KEY: ${MINISIEM_API_KEY:-}
+      MINISIEM_WEBHOOK_URL: ${MINISIEM_WEBHOOK_URL:-}
+      MINISIEM_WEBHOOK_MIN_SEVERITY: ${MINISIEM_WEBHOOK_MIN_SEVERITY:-critical}
+      MINISIEM_WEBHOOK_SECRET: ${MINISIEM_WEBHOOK_SECRET:-}
     ports:
       - "8000:8000"
     depends_on:

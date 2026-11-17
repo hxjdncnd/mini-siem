@@ -1,6 +1,7 @@
 import { Fragment, useState } from "react";
 import { api } from "../api/client";
 import { ACTIONS, SOURCE_TYPES } from "../api/types";
+import { ExportButton } from "../components/ExportButton";
 import { IpLink } from "../components/IpLink";
 import { PageHeader } from "../components/Layout";
 import { Pagination } from "../components/Pagination";
@@ -18,20 +19,15 @@ export function Events() {
   const page = Math.max(0, Number(filters.page) || 0);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const query = {
+    source_type: filters.source_type,
+    action: filters.action,
+    src_ip: filters.src_ip,
+    username: filters.username,
+    q: filters.q,
+  };
   const events = useAsync(
-    (signal) =>
-      api.events(
-        {
-          source_type: filters.source_type,
-          action: filters.action,
-          src_ip: filters.src_ip,
-          username: filters.username,
-          q: filters.q,
-          page,
-          size: PAGE_SIZE,
-        },
-        signal,
-      ),
+    (signal) => api.events({ ...query, page, size: PAGE_SIZE }, signal),
     [filters.source_type, filters.action, filters.src_ip, filters.username, filters.q, page],
   );
   const data = events.data;
@@ -42,9 +38,12 @@ export function Events() {
         title="Events"
         subtitle="Every normalized log event, newest first."
         actions={
-          <button className="btn" onClick={events.reload}>
-            Refresh
-          </button>
+          <>
+            <ExportButton path="/events/export.csv" params={query} />
+            <button className="btn" onClick={events.reload}>
+              Refresh
+            </button>
+          </>
         }
       />
 

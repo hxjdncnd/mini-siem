@@ -37,20 +37,30 @@ def risk_score(severity: Severity, event_count: int, threshold: int) -> int:
 
 class DetectionEngine:
     def __init__(self, rules: list[Rule]):
-        self.rules = [r for r in rules if r.enabled]
+        # The same list the API holds, so switching a rule off takes effect on the next batch.
+        self.rules = rules
 
     def evaluate(self, session: Session, new_events: list[LogEvent]) -> EvaluationResult:
-        run = _Run(session)
-        if new_events:
-            for rule in self.rules:
-                match rule.type:
-                    case "match":
-                        _eval_match(run, rule, new_events)
-                    case "threshold" | "distinct":
-                        _eval_windowed(run, rule, new_events)
-                    case "sequence":
-                        _eval_sequence(run, rule, new_events)
-        return run.result()
+        """Run every enabled rule over the entities the new events touch, creating or extending alerts."""
+        return _scan(_Run(session), [r for r in self.rules if r.enabled], new_events)
+
+    def preview(self, session: Session, rule: Rule, events: list[LogEvent]) -> list[Alert]:
+        """What `rule` would raise over `events` if they had just arrived. Ignores whether the rule is
+        enabled and any alerts that already exist, and writes nothing. Alerts returned are not persisted."""
+        return _scan(_Run(session, dry_run=True), [rule], events).created
+
+
+def _scan(run: "_Run", rules: list[Rule], new_events: list[LogEvent]) -> EvaluationResult:
+    if new_events:
+        for rule in rules:
+            match rule.type:
+                case "match":
+                    _eval_match(run, rule, new_events)
+                case "threshold" | "distinct":
+                    _eval_windowed(run, rule, new_events)
+                case "sequence":
+                    _eval_sequence(run, rule, new_events)
+    return run.result()
 
 
 def _eval_match(run: "_Run", rule: Rule, new_events: list[LogEvent]) -> None:
@@ -146,15 +156,17 @@ def _key_string(rule: Rule, key: tuple) -> str:
 class _Run:
     """State for one evaluation pass: caches, and the bookkeeping of what was created vs. extended."""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, *, dry_run: bool = False):
         self.session = session
+        self.dry_run = dry_run  # build alerts in memory only: no inserts, no deduplication against stored ones
         self._current: dict[tuple[str, str], Alert] = {}
         self._links: dict[str, set[str]] = {}
         self._created: dict[str, Alert] = {}
         self._updated: dict[str, Alert] = {}
 
     def result(self) -> EvaluationResult:
-        self.session.flush()
+        if not self.dry_run:
+            self.session.flush()
         return EvaluationResult(list(self._created.values()), list(self._updated.values()))
 
     def load(self, rule: Rule, key: tuple, lo: int, hi: int, *, prefilter: bool) -> list[LogEvent]:
@@ -191,7 +203,8 @@ class _Run:
                 updated_at=now,
                 **{f: str(entity[f]) for f in _ENTITY_FIELDS if f in entity},
             )
-            self.session.add(alert)
+            if not self.dry_run:
+                self.session.add(alert)
             self._links[alert.id] = set()
             self._created[alert.id] = alert
         self._current[(rule.id, key_string)] = alert
@@ -201,7 +214,8 @@ class _Run:
         if not added and alert.id not in self._created:
             return  # re-scan of evidence this alert already has: nothing changed
         for event in added:
-            self.session.add(AlertEvent(alert_id=alert.id, event_id=event.id))
+            if not self.dry_run:
+                self.session.add(AlertEvent(alert_id=alert.id, event_id=event.id))
             links.add(event.id)
         if alert.id not in self._created:
             self._updated[alert.id] = alert
@@ -220,6 +234,8 @@ class _Run:
         cached = self._current.get((rule.id, key_string))
         if cached is not None and cached.last_seen >= lo and cached.first_seen <= hi:
             return cached
+        if self.dry_run:
+            return None
         return self.session.scalars(
             select(Alert)
             .where(

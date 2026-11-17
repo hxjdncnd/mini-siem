@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Alert, AlertDetail, IpProfile, LogEvent, Rule, StatsSummary } from "./api/types";
+import type { Alert, AlertDetail, IpProfile, LogEvent, Rule, RuleTestResult, StatsSummary } from "./api/types";
 import { App } from "./App";
 
 const alert: Alert = {
@@ -103,6 +103,43 @@ const ipProfile: IpProfile = {
   recent_events: [event],
 };
 
+const ruleTest: RuleTestResult = {
+  rule_id: "ssh-brute-force-success",
+  enabled: true,
+  events_scanned: 298,
+  events_total: 298,
+  scanned_from: "2026-11-16T18:00:00Z",
+  scanned_to: "2026-11-16T19:30:00Z",
+  would_raise: 2,
+  already_raised: 2,
+  findings: [
+    {
+      summary: "203.0.113.61 logged in successfully after repeated failures",
+      severity: "critical",
+      score: 92,
+      group_key: "src_ip=203.0.113.61",
+      src_ip: "203.0.113.61",
+      username: null,
+      host: null,
+      first_seen: "2026-11-16T19:00:00Z",
+      last_seen: "2026-11-16T19:02:00Z",
+      event_count: 11,
+    },
+  ],
+};
+
+const csvResponse = (body: string, headers: Record<string, string> = {}) =>
+  new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "text/csv",
+      "Content-Disposition": 'attachment; filename="alerts-2026-11-17.csv"',
+      "X-Total-Rows": "14",
+      "X-Exported-Rows": "14",
+      ...headers,
+    },
+  });
+
 const page = <T,>(items: T[]) => ({ items, total: items.length, page: 0, size: 50 });
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -120,6 +157,12 @@ function defaultRespond(url: URL, method: string): Response {
     return json({ received: 15, stored: 15, skipped: 0, failed: 0, errors: [], alerts_created: 2, alerts_updated: 0 });
   }
   if (path === "/api/v1/rules") return json([rule]);
+  if (path === "/api/v1/rules/ssh-brute-force-success") return json({ ...rule, enabled: method === "PATCH" ? false : true });
+  if (path === "/api/v1/rules/ssh-brute-force-success/test") return json(ruleTest);
+  if (path === "/api/v1/notifications") return json({ enabled: true, min_severity: "critical", destination: "hooks.slack.com" });
+  if (path === "/api/v1/notifications/test") return json({ delivered: true, status: 200, error: null });
+  if (path === "/api/v1/alerts/export.csv") return csvResponse("id,rule_id\nalert-1,ssh-brute-force\n");
+  if (path === "/api/v1/events/export.csv") return csvResponse("time,action\n", { "Content-Disposition": 'attachment; filename="events-2026-11-17.csv"' });
   if (path === "/api/v1/events") return json(page([event]));
   if (path === "/api/v1/alerts/alert-1") {
     if (method === "PATCH") return json({ ...alert, status: "ACKNOWLEDGED" });
@@ -286,5 +329,143 @@ describe("Upload", () => {
     await user.upload(input, new File(["hello\nworld\n"], "mystery.txt", { type: "text/plain" }));
     expect(await screen.findByText(/Could not tell what kind of log/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Upload and analyze" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("Rules: respond", () => {
+  it("switches a rule off through the API", async () => {
+    const user = userEvent.setup();
+    renderAt("/rules");
+    await user.click(await screen.findByRole("switch", { name: /Switch off Successful login after brute force/ }));
+    await waitFor(() => expect(calls.some((c) => c.method === "PATCH")).toBe(true));
+    const patch = calls.find((c) => c.method === "PATCH");
+    expect(patch?.url).toBe("/api/v1/rules/ssh-brute-force-success");
+    expect(JSON.parse(patch?.body ?? "{}")).toEqual({ enabled: false });
+  });
+
+  it("reports a rule that could not be switched instead of pretending it worked", async () => {
+    const user = userEvent.setup();
+    respond = (url, method) =>
+      method === "PATCH" ? json({ detail: "database is locked" }, 500) : defaultRespond(url, method);
+    renderAt("/rules");
+    await user.click(await screen.findByRole("switch", { name: /Switch off/ }));
+    expect(await screen.findByText("database is locked")).toBeTruthy();
+  });
+
+  it("tries a rule against the stored events without changing anything", async () => {
+    const user = userEvent.setup();
+    renderAt("/rules");
+    await user.click(await screen.findByRole("button", { name: "Test Successful login after brute force" }));
+    const drawer = await screen.findByRole("dialog");
+    expect(await within(drawer).findByText(/would be raised on the stored events/)).toBeTruthy();
+    expect(within(drawer).getByText(/Nothing was created or changed/)).toBeTruthy();
+    expect(within(drawer).getByText("203.0.113.61 logged in successfully after repeated failures")).toBeTruthy();
+    const post = calls.find((c) => c.url.endsWith("/test"));
+    expect(post?.method).toBe("POST");
+  });
+
+  it("shows where critical alerts are sent and can send a test message", async () => {
+    const user = userEvent.setup();
+    renderAt("/rules");
+    expect(await screen.findByText("hooks.slack.com")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Send a test message" }));
+    expect(await screen.findByText(/Delivered \(HTTP 200\)/)).toBeTruthy();
+  });
+
+  it("explains how to turn notifications on when they are off", async () => {
+    respond = (url, method) =>
+      url.pathname === "/api/v1/notifications"
+        ? json({ enabled: false, min_severity: "critical", destination: null })
+        : defaultRespond(url, method);
+    renderAt("/rules");
+    expect(await screen.findByText("MINISIEM_WEBHOOK_URL")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Send a test message" })).toBeNull();
+  });
+
+  it("says when a test message was not delivered", async () => {
+    const user = userEvent.setup();
+    respond = (url, method) =>
+      url.pathname === "/api/v1/notifications/test"
+        ? json({ delivered: false, status: 404, error: "The receiver answered HTTP 404" })
+        : defaultRespond(url, method);
+    renderAt("/rules");
+    await user.click(await screen.findByRole("button", { name: "Send a test message" }));
+    expect(await screen.findByText(/Not delivered: The receiver answered HTTP 404/)).toBeTruthy();
+  });
+});
+
+describe("CSV export", () => {
+  let saved: { filename: string }[];
+  beforeEach(() => {
+    saved = [];
+    // jsdom has no object URLs and cannot navigate, so stand in for both and record what would be saved.
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: () => "blob:test" });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: () => {} });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      saved.push({ filename: this.download });
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(URL, "createObjectURL");
+    Reflect.deleteProperty(URL, "revokeObjectURL");
+  });
+
+  it("downloads the alerts the page is filtered to", async () => {
+    const user = userEvent.setup();
+    renderAt("/alerts?severity=high&sort=score");
+    await user.click(await screen.findByRole("button", { name: "Export CSV" }));
+    expect(await screen.findByText("Saved 14 rows.")).toBeTruthy();
+    const call = calls.find((c) => c.url.startsWith("/api/v1/alerts/export.csv"));
+    expect(call?.url).toContain("severity=high");
+    expect(call?.url).toContain("sort=score");
+    expect(call?.url).toContain("active=true");
+    expect(call?.url).not.toContain("page=");
+    expect(saved).toEqual([{ filename: "alerts-2026-11-17.csv" }]);
+  });
+
+  it("downloads the events matching the search", async () => {
+    const user = userEvent.setup();
+    renderAt("/events?src_ip=203.0.113.50&q=sqlmap");
+    await user.click(await screen.findByRole("button", { name: "Export CSV" }));
+    await waitFor(() => expect(saved).toHaveLength(1));
+    const call = calls.find((c) => c.url.startsWith("/api/v1/events/export.csv"));
+    expect(call?.url).toContain("src_ip=203.0.113.50");
+    expect(call?.url).toContain("q=sqlmap");
+    expect(saved[0]?.filename).toBe("events-2026-11-17.csv");
+  });
+
+  it("warns when the server cut the export short", async () => {
+    const user = userEvent.setup();
+    respond = (url, method) =>
+      url.pathname === "/api/v1/alerts/export.csv"
+        ? csvResponse("id\n", { "X-Total-Rows": "250000", "X-Exported-Rows": "100000" })
+        : defaultRespond(url, method);
+    renderAt("/alerts");
+    await user.click(await screen.findByRole("button", { name: "Export CSV" }));
+    expect(await screen.findByText(/first 100,000 of 250,000 rows/)).toBeTruthy();
+  });
+
+  it("still saves the file when a proxy strips the row-count headers", async () => {
+    const user = userEvent.setup();
+    respond = (url, method) =>
+      url.pathname === "/api/v1/alerts/export.csv"
+        ? new Response("id\n", { status: 200, headers: { "Content-Type": "text/csv" } })
+        : defaultRespond(url, method);
+    renderAt("/alerts");
+    await user.click(await screen.findByRole("button", { name: "Export CSV" }));
+    expect(await screen.findByText("Saved the CSV file.")).toBeTruthy();
+    expect(saved).toEqual([{ filename: "alerts.csv" }]);
+  });
+
+  it("shows the problem when the export fails", async () => {
+    const user = userEvent.setup();
+    respond = (url, method) =>
+      url.pathname === "/api/v1/alerts/export.csv" ? json({ detail: "Missing or invalid X-API-Key header" }, 401) : defaultRespond(url, method);
+    renderAt("/alerts");
+    await user.click(await screen.findByRole("button", { name: "Export CSV" }));
+    expect(await screen.findByText("Missing or invalid X-API-Key header")).toBeTruthy();
+    expect(saved).toHaveLength(0);
   });
 });

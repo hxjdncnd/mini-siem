@@ -7,8 +7,11 @@ import type {
   IpProfile,
   LogEvent,
   LogFormat,
+  NotificationStatus,
+  NotificationTest,
   Page,
   Rule,
+  RuleTestResult,
   StatsSummary,
 } from "./types";
 
@@ -42,7 +45,7 @@ export function setApiKey(key: string): void {
   }
 }
 
-type Params = Record<string, string | number | boolean | undefined | null>;
+export type Params = Record<string, string | number | boolean | undefined | null>;
 
 /** Builds "?a=1&b=2", leaving out anything unset or empty so filters stay optional. */
 export function toQuery(params: Params = {}): string {
@@ -69,18 +72,56 @@ async function request<T>(url: string, init: RequestInit = {}, signal?: AbortSig
     throw new ApiError(0, "Cannot reach the API. Is the backend running on port 8000?");
   }
 
-  if (!response.ok) {
-    let detail = response.statusText;
-    try {
-      const body = await response.json();
-      if (typeof body.detail === "string") detail = body.detail;
-      else if (Array.isArray(body.detail)) detail = body.detail.map((d: { msg: string }) => d.msg).join("; ");
-    } catch {
-      /* body was not JSON; keep the status text */
-    }
-    throw new ApiError(response.status, detail || `Request failed (${response.status})`);
-  }
+  if (!response.ok) throw await failure(response);
   return (await response.json()) as T;
+}
+
+/** Turns an error response into an ApiError carrying the server's explanation when it gave one. */
+async function failure(response: Response): Promise<ApiError> {
+  let detail = response.statusText;
+  try {
+    const body = await response.json();
+    if (typeof body.detail === "string") detail = body.detail;
+    else if (Array.isArray(body.detail)) detail = body.detail.map((d: { msg: string }) => d.msg).join("; ");
+  } catch {
+    /* body was not JSON; keep the status text */
+  }
+  return new ApiError(response.status, detail || `Request failed (${response.status})`);
+}
+
+export interface CsvDownload {
+  blob: Blob;
+  filename: string;
+  /** Rows that matched the filters, or null if a proxy stripped the header that says so. */
+  total: number | null;
+  /** Rows actually in the file; smaller than total when the server's export limit cut it short. */
+  exported: number | null;
+}
+
+/** Fetches a CSV with the API key header (a plain link could not send it) so the caller can save it. */
+async function download(path: string, params: Params, signal?: AbortSignal): Promise<CsvDownload> {
+  const headers = new Headers();
+  const key = getApiKey();
+  if (key) headers.set("X-API-Key", key);
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}${path}${toQuery(params)}`, { headers, signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError(0, "Cannot reach the API. Is the backend running on port 8000?");
+  }
+  if (!response.ok) throw await failure(response);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const count = (name: string) => {
+    const value = response.headers.get(name);
+    return value !== null && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null;
+  };
+  return {
+    blob: await response.blob(),
+    filename: /filename="([^"]+)"/.exec(disposition)?.[1] ?? path.split("/")[1] + ".csv",
+    total: count("X-Total-Rows"),
+    exported: count("X-Exported-Rows"),
+  };
 }
 
 const get = <T>(path: string, params?: Params, signal?: AbortSignal) =>
@@ -119,6 +160,15 @@ export const api = {
     request<Alert>(`${BASE}/alerts/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(update) }),
   events: (filters: EventFilters, signal?: AbortSignal) => get<Page<LogEvent>>("/events", { ...filters }, signal),
   rules: (signal?: AbortSignal) => get<Rule[]>("/rules", {}, signal),
+  setRuleEnabled: (id: string, enabled: boolean) =>
+    request<Rule>(`${BASE}/rules/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ enabled }) }),
+  /** Dry run: what the rule would raise over the stored events. Changes nothing. */
+  testRule: (id: string, signal?: AbortSignal) =>
+    request<RuleTestResult>(`${BASE}/rules/${encodeURIComponent(id)}/test`, { method: "POST" }, signal),
+  notifications: (signal?: AbortSignal) => get<NotificationStatus>("/notifications", {}, signal),
+  testNotification: () => request<NotificationTest>(`${BASE}/notifications/test`, { method: "POST" }),
+  downloadCsv: (path: "/alerts/export.csv" | "/events/export.csv", params: Params, signal?: AbortSignal) =>
+    download(path, params, signal),
   ip: (ip: string, signal?: AbortSignal) => get<IpProfile>(`/ips/${encodeURIComponent(ip)}`, {}, signal),
   /** Sends raw log text through the same parsers and detection rules as live traffic. */
   ingest: (format: LogFormat, text: string, host?: string) =>
