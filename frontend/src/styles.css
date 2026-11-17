@@ -77,7 +77,7 @@ a:hover { text-decoration: underline; }
 .tone-accent { color: var(--accent); }
 .grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 14px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
-.chart { height: 240px; }
+.chart { height: 300px; }
 
 /* ---- controls ---- */
 .btn {
@@ -117,6 +117,7 @@ tr:last-child td { border-bottom: 0; }
 tbody tr.clickable { cursor: pointer; }
 tbody tr.clickable:hover td, tbody tr.selected td { background: #15203a; }
 td.nowrap, th.nowrap { white-space: nowrap; }
+td.cond { min-width: 250px; }
 .cell-sub { color: var(--muted); font-size: 12.5px; }
 .raw { margin: 6px 0 0; padding: 10px 12px; background: #0b1120; border: 1px solid var(--border); border-radius: 8px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; color: #b9c4dc; }
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; flex-wrap: wrap; }

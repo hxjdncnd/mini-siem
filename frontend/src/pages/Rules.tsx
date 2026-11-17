@@ -60,7 +60,7 @@ export function Rules() {
                   <td>
                     <SeverityBadge severity={rule.severity} />
                   </td>
-                  <td>{condition(rule)}</td>
+                  <td className="cond">{condition(rule)}</td>
                   <td className="mono">{rule.group_by.length ? rule.group_by.join(", ") : "-"}</td>
                   <td>
                     {rule.mitre ? (

@@ -6,6 +6,18 @@ deduplicated, severity-scored alerts with the evidence attached.
 
 Status: complete. A tested FastAPI backend and a React dashboard on top of it.
 
+![Overview: event timeline, alerts by severity and rule, top source addresses](docs/overview.png)
+
+<details>
+<summary>More screenshots</summary>
+
+![Alert triage queue sorted by risk score](docs/alerts.png)
+![One alert with its MITRE technique, triage buttons, analyst note and the raw log lines that triggered it](docs/alert-detail.png)
+![Searchable event log](docs/events.png)
+![Detection rules in plain language](docs/rules.png)
+
+</details>
+
 ## What it does
 
 - **Ingests three log formats** as raw text: SSH/sudo (`auth.log`), nginx/Apache access logs,

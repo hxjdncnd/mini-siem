@@ -110,8 +110,8 @@ export function Events() {
                         }}
                       >
                         <td className="nowrap muted">{formatDateTime(event.timestamp)}</td>
-                        <td>{humanize(event.source_type)}</td>
-                        <td>{humanize(event.action)}</td>
+                        <td className="nowrap">{humanize(event.source_type)}</td>
+                        <td className="nowrap">{humanize(event.action)}</td>
                         <td className="mono">{event.host ?? "-"}</td>
                         <td className="mono">{event.src_ip ?? "-"}</td>
                         <td className="mono">{event.username ?? "-"}</td>
