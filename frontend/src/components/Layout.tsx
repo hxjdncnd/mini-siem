@@ -2,6 +2,8 @@ import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api, getApiKey, setApiKey } from "../api/client";
 import { useAsync } from "../hooks/useAsync";
+import { useLive } from "../hooks/useLive";
+import { LiveToasts } from "./LiveToasts";
 
 const NAV = [
   { to: "/", label: "Overview", end: true },
@@ -9,11 +11,13 @@ const NAV = [
   { to: "/events", label: "Events" },
   { to: "/upload", label: "Upload" },
   { to: "/rules", label: "Rules" },
+  { to: "/coverage", label: "Coverage" },
 ];
 
 export function Layout() {
   const health = useAsync((signal) => api.health(signal), [], 20_000);
-  const open = useAsync((signal) => api.alerts({ active: true, size: 1 }, signal), [], 15_000);
+  const open = useAsync((signal) => api.alerts({ active: true, size: 1 }, signal), [], 15_000, { live: true });
+  const live = useLive();
   const [editingKey, setEditingKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState(getApiKey());
   const [lookup, setLookup] = useState("");
@@ -83,6 +87,10 @@ export function Layout() {
             <span className={`dot ${online ? "dot-ok" : "dot-bad"}`} aria-hidden="true" />
             {online ? `API online, ${health.data?.rules} rules` : health.error ? "API unreachable" : "Connecting..."}
           </div>
+          <div className="status-line" title="Updates arrive over a held-open connection; if it drops the pages poll instead">
+            <span className={`dot ${live.status === "live" ? "dot-live" : live.status === "connecting" ? "" : "dot-warn"}`} aria-hidden="true" />
+            {live.status === "live" ? "Live" : live.status === "connecting" ? "Connecting live feed..." : "Live feed off, polling"}
+          </div>
           {editingKey ? (
             <form
               className="keyform"
@@ -118,6 +126,7 @@ export function Layout() {
       <main className="main">
         <Outlet />
       </main>
+      <LiveToasts />
     </div>
   );
 }

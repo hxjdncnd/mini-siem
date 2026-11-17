@@ -83,7 +83,7 @@ function Notifications() {
 }
 
 export function Rules() {
-  const rules = useAsync((signal) => api.rules(signal), []);
+  const rules = useAsync((signal) => api.rules(signal), [], undefined, { live: true });
   const data = rules.data;
   const [testing, setTesting] = useState<Rule | null>(null);
   const [switching, setSwitching] = useState<string | null>(null);

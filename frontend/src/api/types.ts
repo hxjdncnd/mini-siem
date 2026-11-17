@@ -205,3 +205,42 @@ export interface NotificationTest {
   status: number | null;
   error: string | null;
 }
+
+/** What the live feed sends when a batch of logs has been stored. */
+export interface LiveMessage {
+  type: "ingest";
+  stored: number;
+  alerts_created: number;
+  alerts_updated: number;
+  new_alerts: { id: string; rule_name: string; severity: Severity; summary: string; score: number }[];
+}
+
+export interface CoverageRule {
+  id: string;
+  name: string;
+  severity: Severity;
+  enabled: boolean;
+}
+
+export interface CoverageTechnique {
+  id: string;
+  name: string;
+  covered: boolean;
+  rules: CoverageRule[];
+  alert_count: number;
+  active_alerts: number;
+}
+
+export interface CoverageTactic {
+  id: string;
+  name: string;
+  techniques: CoverageTechnique[];
+}
+
+export interface Coverage {
+  tactics: CoverageTactic[];
+  techniques_covered: number;
+  rules_total: number;
+  rules_enabled: number;
+  rules_untagged: string[];
+}

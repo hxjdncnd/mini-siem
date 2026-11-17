@@ -29,6 +29,8 @@ export function Events() {
   const events = useAsync(
     (signal) => api.events({ ...query, page, size: PAGE_SIZE }, signal),
     [filters.source_type, filters.action, filters.src_ip, filters.username, filters.q, page],
+    undefined,
+    { live: true },
   );
   const data = events.data;
 

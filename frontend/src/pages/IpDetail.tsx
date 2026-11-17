@@ -11,7 +11,7 @@ import { describeEvent, formatDateTime, formatDuration, formatNumber, humanize, 
 
 export function IpDetail() {
   const { ip = "" } = useParams();
-  const profile = useAsync((signal) => api.ip(ip, signal), [ip], 15_000);
+  const profile = useAsync((signal) => api.ip(ip, signal), [ip], 15_000, { live: true });
   const data = profile.data;
 
   if (!data && profile.loading) return <Loading label="Looking up the address" />;

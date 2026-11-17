@@ -21,8 +21,8 @@ const RANGES = [
 
 export function Overview() {
   const [hours, setHours] = useState(24);
-  const stats = useAsync((signal) => api.stats({ from: hoursAgoIso(hours), top: 8 }, signal), [hours], 15_000);
-  const urgent = useAsync((signal) => api.alerts({ active: true, sort: "score", size: 6 }, signal), [], 15_000);
+  const stats = useAsync((signal) => api.stats({ from: hoursAgoIso(hours), top: 8 }, signal), [hours], 15_000, { live: true });
+  const urgent = useAsync((signal) => api.alerts({ active: true, sort: "score", size: 6 }, signal), [], 15_000, { live: true });
 
   const data = stats.data;
   const severityCount = (severity: Severity) => data?.alerts_by_severity.find((c) => c.key === severity)?.count ?? 0;
@@ -32,7 +32,7 @@ export function Overview() {
     <>
       <PageHeader
         title="Overview"
-        subtitle="What the platform has seen and what it has flagged. Refreshes every 15 seconds."
+        subtitle="What the platform has seen and what it has flagged. Updates the moment new logs arrive."
         actions={
           <div className="segmented" role="group" aria-label="Time range">
             {RANGES.map((range) => (

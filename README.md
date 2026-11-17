@@ -18,6 +18,8 @@ Status: complete. A tested FastAPI backend and a React dashboard on top of it.
 ![Dry run of a rule against the stored events: what it would raise, with nothing created](docs/rule-test.png)
 ![Investigation page for one address: what it did, which alerts it caused, its latest events](docs/ip-detail.png)
 ![Uploading a log file and seeing what the detection rules made of it](docs/upload.png)
+![Live updates: serious new alerts pop up the moment they are raised, and the counts move without a reload](docs/live.png)
+![ATT&CK coverage: the rules laid out by tactic, with the techniques that have no rule yet](docs/coverage.png)
 
 </details>
 
@@ -125,6 +127,7 @@ same value under **API key** in the sidebar.
 | Investigate (`/ips/<address>`) | Everything known about one address: what kind of address it is (public, private, documentation range...), activity over time, the accounts, ports and URL paths it touched, every alert about it and its latest events. Reached by clicking any address, or from the **Investigate an IP** box in the sidebar. |
 | Upload | Drop in an auth.log, an nginx or Apache access log, or a UFW log. The format is detected, the file goes through the same parsers and rules as live traffic, and you see how many events were stored and which alerts were raised. "Try a sample SSH attack" generates a brute force you can investigate straight away. |
 | Rules | Each loaded rule in plain language, its MITRE ATT&CK technique, and how many alerts it has raised. Switch a rule off or on (the choice survives a restart), or press **Test** to replay the stored events through it and see what it would raise, without creating anything. Also shows whether webhook notifications are on and can send a test message. |
+| Coverage | The detection rules laid out on MITRE ATT&CK by tactic. Each technique card shows its rules (and whether they are switched off) and how many alerts it has raised, and a hand-picked set of techniques with no rule yet shows where the next one would go. |
 
 Filters live in the URL, so a filtered view can be bookmarked or shared, and the charts link into the matching
 alert or event lists.
@@ -140,6 +143,8 @@ All routes are under `/api/v1`. Full request and response schemas are in the int
 | GET | `/events` | Search events: filter by source, action, IP, user, host, time range, text |
 | GET | `/events/export.csv` | Events as a CSV download, same filters as the search |
 | GET | `/events/{id}` | One event |
+| GET | `/coverage` | The rules placed on ATT&CK tactics and techniques, with alert counts and the techniques not covered yet |
+| GET | `/stream` | Live feed (server-sent events): an `ingest` event for every batch stored, with the alerts it raised |
 | GET | `/notifications` | Whether a webhook is configured, the minimum severity and the destination host |
 | POST | `/notifications/test` | Send a test message to the webhook and report what the receiver answered |
 | GET | `/alerts` | List alerts: filter by status, severity, rule, entity; sort by recency or score |
@@ -155,6 +160,19 @@ All routes are under `/api/v1`. Full request and response schemas are in the int
 
 Ingestion is forgiving by design: a malformed line is counted and reported in the response,
 and the rest of the batch is still stored.
+
+## Live updates
+
+The dashboard holds one connection open to `GET /api/v1/stream` (server-sent events). Whenever a batch of
+logs is stored, the server announces it; the page you are on refetches straight away, the alert count in
+the sidebar moves, and any new high or critical alert pops up as a toast that links to it. The sidebar
+shows **Live** while the connection is up. If it drops, the dashboard says so, keeps polling every 15
+seconds, and reconnects with a growing delay.
+
+The browser's built-in `EventSource` cannot send an `X-API-Key` header, so the dashboard reads the stream
+with `fetch` instead. Behind a reverse proxy the stream needs buffering off and a long read timeout
+(`frontend/nginx.conf` does this). Each message also carries `: keepalive` comments while quiet so idle
+connections are not closed.
 
 ## Notifications
 
@@ -230,9 +248,10 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-131 tests cover the parsers, rule validation, every rule type through the real HTTP API, alert
-deduplication and triage, rule switching, the rule dry run, webhook delivery (against a real local
-receiver), CSV export, and each simulator scenario (asserting it trips exactly the rules it claims to). To run the suite against PostgreSQL, set `MINISIEM_TEST_DATABASE_URL`. CI runs
+153 tests cover the parsers, rule validation, every rule type through the real HTTP API, alert
+deduplication and triage, rule switching, the rule dry run, webhook delivery and the live feed (both
+against real local servers), CSV export, ATT&CK coverage, and each simulator scenario (asserting it trips
+exactly the rules it claims to). To run the suite against PostgreSQL, set `MINISIEM_TEST_DATABASE_URL`. CI runs
 lint plus both database runs on every push.
 
 The dashboard has its own tests: unit tests for the formatting helpers, and component tests that render the real
@@ -260,6 +279,7 @@ Environment variables, or a `.env` file (see `.env.example`):
 | `MINISIEM_WEBHOOK_MIN_SEVERITY` | `critical` | Lowest severity that sends a message |
 | `MINISIEM_WEBHOOK_SECRET` | unset | Signs each request body (HMAC-SHA256) |
 | `MINISIEM_WEBHOOK_TIMEOUT_SECONDS` | `5` | How long to wait for the receiver |
+| `MINISIEM_LIVE_KEEPALIVE_SECONDS` | `15` | How long the live stream may be quiet before sending a keepalive |
 
 ## Known limits
 
@@ -267,7 +287,8 @@ Environment variables, or a `.env` file (see `.env.example`):
 - Detection runs inline with ingestion, which is simple and consistent but ties ingest speed
   to rule cost. A queue between the two would be the next step at higher volume.
 - One shared API key, no user accounts or roles. The dashboard keeps the key in the browser's local storage.
-- The dashboard polls every 15 seconds; there is no live push.
+- Live updates are announced from one process. With several server workers a batch ingested by one would not reach dashboards connected to another; that needs a shared bus such as Redis pub/sub in front of `app/live.py`.
+- The ATT&CK map is built from the `mitre:` tags on the rules and a small built-in reference of technique names and tactics, not the full matrix. A tag it does not know is listed under "Unmapped", and a test fails when a shipped rule uses one.
 - Switching a rule off is held in each server process, so run a single worker (as the Docker image does). Several workers would only see the change after a restart.
 - Webhook delivery has no retry or queue. A receiver that is down when an alert is raised misses it; the alert is still in the dashboard.
 - The schema is created at startup with no migration tool.

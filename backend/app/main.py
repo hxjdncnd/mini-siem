@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
-from app.api import alerts, entities, events, ingest, notifications, overview
+from app.api import alerts, coverage, entities, events, ingest, notifications, overview, stream
 from app.api import rules as rules_api
 from app.api.deps import require_api_key
 from app.config import Settings
@@ -13,6 +13,7 @@ from app.db import create_schema, make_engine, make_session_factory
 from app.detection.engine import DetectionEngine
 from app.detection.rules import load_rules
 from app.ingest import IngestService
+from app.live import Broker
 from app.models import RuleState
 from app.notify import Notifier
 
@@ -43,7 +44,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.session_factory = make_session_factory(engine)
         _apply_saved_switches(app.state.session_factory, rules)
         app.state.rules = rules
-        app.state.ingest = IngestService(settings, DetectionEngine(rules), Notifier(settings))
+        app.state.broker = Broker()
+        app.state.ingest = IngestService(settings, DetectionEngine(rules), Notifier(settings), app.state.broker)
         yield
         app.state.ingest.notifier.shutdown()
         engine.dispose()
@@ -63,7 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
-    for module in (ingest, events, alerts, entities, rules_api, notifications, overview):
+    for module in (ingest, events, alerts, entities, rules_api, coverage, notifications, stream, overview):
         api.include_router(module.router)
     app.include_router(api)
 

@@ -33,6 +33,7 @@ export function Alerts() {
     (signal) => api.alerts({ ...query, page, size: PAGE_SIZE }, signal),
     [filters.status, filters.severity, filters.rule_id, filters.src_ip, filters.sort, page],
     15_000,
+    { live: true },
   );
 
   const data = alerts.data;

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     webhook_secret: str | None = None
     webhook_timeout_seconds: float = 5.0
 
+    # How long the live stream may sit idle before sending a keepalive (keeps proxies from closing it).
+    live_keepalive_seconds: float = 15.0
+
     @field_validator("webhook_url")
     @classmethod
     def _webhook_is_http(cls, value: str | None) -> str | None:

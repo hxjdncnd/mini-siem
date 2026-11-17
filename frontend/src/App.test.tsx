@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Alert, AlertDetail, IpProfile, LogEvent, Rule, RuleTestResult, StatsSummary } from "./api/types";
+import type { Alert, AlertDetail, Coverage, IpProfile, LogEvent, Rule, RuleTestResult, StatsSummary } from "./api/types";
 import { App } from "./App";
 
 const alert: Alert = {
@@ -128,6 +128,56 @@ const ruleTest: RuleTestResult = {
   ],
 };
 
+const coverage: Coverage = {
+  tactics: [
+    {
+      id: "TA0006",
+      name: "Credential Access",
+      techniques: [
+        {
+          id: "T1110.001",
+          name: "Brute Force: Password Guessing",
+          covered: true,
+          rules: [{ id: "ssh-brute-force", name: "SSH brute force", severity: "high", enabled: true }],
+          alert_count: 3,
+          active_alerts: 2,
+        },
+        {
+          id: "T1110.003",
+          name: "Brute Force: Password Spraying",
+          covered: true,
+          rules: [{ id: "password-spray", name: "Password spraying", severity: "high", enabled: false }],
+          alert_count: 0,
+          active_alerts: 0,
+        },
+      ],
+    },
+    {
+      id: "TA0003",
+      name: "Persistence",
+      techniques: [{ id: "T1136", name: "Create Account", covered: false, rules: [], alert_count: 0, active_alerts: 0 }],
+    },
+  ],
+  techniques_covered: 2,
+  rules_total: 11,
+  rules_enabled: 10,
+  rules_untagged: [],
+};
+
+/** A live feed the test controls: push() sends the page a frame whenever the test wants. */
+function openFeed() {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({ start: (c) => void (controller = c) });
+  return {
+    response: new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } }),
+    push: (text: string) => controller.enqueue(encoder.encode(text)),
+  };
+}
+
+const ingestFrame = (newAlerts: object[] = [], stored = 12) =>
+  `event: ingest\ndata: ${JSON.stringify({ type: "ingest", stored, alerts_created: newAlerts.length, alerts_updated: 0, new_alerts: newAlerts })}\n\n`;
+
 const csvResponse = (body: string, headers: Record<string, string> = {}) =>
   new Response(body, {
     status: 200,
@@ -159,6 +209,7 @@ function defaultRespond(url: URL, method: string): Response {
   if (path === "/api/v1/rules") return json([rule]);
   if (path === "/api/v1/rules/ssh-brute-force-success") return json({ ...rule, enabled: method === "PATCH" ? false : true });
   if (path === "/api/v1/rules/ssh-brute-force-success/test") return json(ruleTest);
+  if (path === "/api/v1/coverage") return json(coverage);
   if (path === "/api/v1/notifications") return json({ enabled: true, min_severity: "critical", destination: "hooks.slack.com" });
   if (path === "/api/v1/notifications/test") return json({ delivered: true, status: 200, error: null });
   if (path === "/api/v1/alerts/export.csv") return csvResponse("id,rule_id\nalert-1,ssh-brute-force\n");
@@ -467,5 +518,121 @@ describe("CSV export", () => {
     await user.click(await screen.findByRole("button", { name: "Export CSV" }));
     expect(await screen.findByText("Missing or invalid X-API-Key header")).toBeTruthy();
     expect(saved).toHaveLength(0);
+  });
+});
+
+describe("Live feed", () => {
+  const critical = { id: "alert-9", rule_name: "Successful login after brute force", severity: "critical", summary: "203.0.113.61 got in", score: 92 };
+  const low = { id: "alert-10", rule_name: "Known scanning tool", severity: "low", summary: "sqlmap seen", score: 30 };
+
+  function withFeed() {
+    const feed = openFeed();
+    respond = (url, method) => (url.pathname === "/api/v1/stream" ? feed.response : defaultRespond(url, method));
+    return feed;
+  }
+
+  it("says it is live while the feed is connected", async () => {
+    withFeed();
+    renderAt("/");
+    expect(await screen.findByText("Live")).toBeTruthy();
+  });
+
+  it("falls back to polling when the feed cannot be opened", async () => {
+    renderAt("/"); // the default responder has no /stream route
+    expect(await screen.findByText("Live feed off, polling")).toBeTruthy();
+  });
+
+  it("sends the API key with the stream request, which EventSource could not", async () => {
+    localStorage.setItem("minisiem.apiKey", "s3cret");
+    try {
+      let sent: string | null = null;
+      const feed = openFeed();
+      respond = (url, method) => {
+        if (url.pathname === "/api/v1/stream") return feed.response;
+        return defaultRespond(url, method);
+      };
+      const original = globalThis.fetch;
+      vi.stubGlobal("fetch", (input: string, init?: RequestInit) => {
+        if (input.endsWith("/stream")) sent = new Headers(init?.headers).get("X-API-Key");
+        return original(input, init);
+      });
+      renderAt("/");
+      await screen.findByText("Live");
+      expect(sent).toBe("s3cret");
+    } finally {
+      localStorage.removeItem("minisiem.apiKey");
+    }
+  });
+
+  it("refetches the alert list as soon as new data is stored", async () => {
+    const feed = withFeed();
+    renderAt("/alerts");
+    await screen.findByText("Live");
+    await screen.findByText("SSH brute force");
+    // The page asks for 25 at a time; the sidebar badge asks for 1 and refreshes on its own.
+    const listCalls = () => calls.filter((c) => c.url.startsWith("/api/v1/alerts?") && c.url.includes("size=25")).length;
+    const before = listCalls();
+    feed.push(ingestFrame());
+    await waitFor(() => expect(listCalls()).toBeGreaterThan(before));
+  });
+
+  it("pops up serious new alerts only, and each links to its alert", async () => {
+    const feed = withFeed();
+    renderAt("/");
+    await screen.findByText("Live");
+    feed.push(ingestFrame([critical, low]));
+    expect(await screen.findByText("203.0.113.61 got in")).toBeTruthy();
+    expect(screen.queryByText("sqlmap seen")).toBeNull();
+    const link = screen.getByRole("link", { name: "Open the alert" }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/alerts?alert=alert-9&status=all");
+  });
+
+  it("lets the analyst dismiss a toast", async () => {
+    const feed = withFeed();
+    const user = userEvent.setup();
+    renderAt("/");
+    await screen.findByText("Live");
+    feed.push(ingestFrame([critical]));
+    await user.click(await screen.findByRole("button", { name: /Dismiss Successful login after brute force/ }));
+    expect(screen.queryByText("203.0.113.61 got in")).toBeNull();
+  });
+
+  it("carries on after a frame it cannot read", async () => {
+    const feed = withFeed();
+    renderAt("/");
+    await screen.findByText("Live");
+    feed.push("event: ingest\ndata: {not json\n\n");
+    feed.push(ingestFrame([critical]));
+    expect(await screen.findByText("203.0.113.61 got in")).toBeTruthy();
+  });
+});
+
+describe("Coverage", () => {
+  it("lays the rules out by tactic, with the alerts each technique has raised", async () => {
+    renderAt("/coverage");
+    const tactic = await screen.findByRole("listitem", { name: "Credential Access" });
+    expect(within(tactic).getByText("Brute Force: Password Guessing")).toBeTruthy();
+    expect(within(tactic).getByText("3 alerts")).toBeTruthy();
+    const rule = within(tactic).getByRole("link", { name: "SSH brute force" }) as HTMLAnchorElement;
+    expect(rule.getAttribute("href")).toBe("/alerts?rule_id=ssh-brute-force&status=all");
+    const link = within(tactic).getByRole("link", { name: "T1110.001" }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("https://attack.mitre.org/techniques/T1110/001/");
+    expect(screen.getByText("10 / 11")).toBeTruthy();
+  });
+
+  it("marks a technique whose only rule is switched off", async () => {
+    renderAt("/coverage");
+    const tactic = await screen.findByRole("listitem", { name: "Credential Access" });
+    expect(within(tactic).getByText("off")).toBeTruthy();
+  });
+
+  it("shows techniques with no rule yet, and can hide them", async () => {
+    const user = userEvent.setup();
+    renderAt("/coverage");
+    expect(await screen.findByText("Create Account")).toBeTruthy();
+    expect(screen.getByText("No rule yet")).toBeTruthy();
+    await user.click(screen.getByRole("checkbox", { name: /Show techniques with no rule yet/ }));
+    expect(screen.queryByText("Create Account")).toBeNull();
+    expect(screen.queryByRole("listitem", { name: "Persistence" })).toBeNull();
   });
 });

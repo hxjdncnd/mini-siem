@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLive } from "./useLive";
 
 interface AsyncState<T> {
   data: T | undefined;
@@ -10,12 +11,16 @@ interface AsyncState<T> {
  * Runs an async loader whenever `deps` change, and optionally again every `refreshMs`.
  * Stale responses are cancelled, and data from the previous run stays on screen while the
  * next one loads, so background refreshes and filter changes do not flash an empty state.
+ * With `live`, it also reruns whenever the live feed reports that new data was stored.
  */
 export function useAsync<T>(
   loader: (signal: AbortSignal) => Promise<T>,
   deps: readonly unknown[],
   refreshMs?: number,
+  options: { live?: boolean } = {},
 ) {
+  const liveTick = useLive().tick;
+  const watchLive = options.live ? liveTick : 0;
   const [state, setState] = useState<AsyncState<T>>({ data: undefined, error: undefined, loading: true });
   const [tick, setTick] = useState(0);
   const loaderRef = useRef(loader);
@@ -37,7 +42,7 @@ export function useAsync<T>(
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, tick]);
+  }, [...deps, tick, watchLive]);
 
   useEffect(() => {
     if (!refreshMs) return;

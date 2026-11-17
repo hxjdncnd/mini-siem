@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.detection.engine import DetectionEngine
+from app.live import Broker
 from app.models import LogEvent
 from app.notify import Notifier
 from app.parsers import PARSERS, MalformedLine, ParseContext, ParsedEvent
@@ -20,10 +21,17 @@ class IngestError(ValueError):
 
 
 class IngestService:
-    def __init__(self, settings: Settings, engine: DetectionEngine, notifier: Notifier | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        engine: DetectionEngine,
+        notifier: Notifier | None = None,
+        broker: Broker | None = None,
+    ):
         self.settings = settings
         self.engine = engine
         self.notifier = notifier or Notifier(settings)
+        self.broker = broker or Broker()
         self.default_tz = ZoneInfo(settings.default_timezone)
 
     def ingest_raw(self, session: Session, log_format: str, body: str, fallback_host: str | None) -> IngestResult:
@@ -82,7 +90,22 @@ class IngestService:
         session.flush()
         outcome = self.engine.evaluate(session, events)
         session.commit()  # events and the alerts they caused land together or not at all
-        self.notifier.alerts_created([AlertOut.of(alert) for alert in outcome.created])  # only once it is durable
+        created = [AlertOut.of(alert) for alert in outcome.created]
+        self.notifier.alerts_created(created)  # notify only once it is durable
+        if events:
+            self.broker.publish(
+                {
+                    "type": "ingest",
+                    "stored": len(events),
+                    "alerts_created": len(created),
+                    "alerts_updated": len(outcome.updated),
+                    # Enough to show a toast; the dashboard fetches anything more by id.
+                    "new_alerts": [
+                        a.model_dump(mode="json", include={"id", "rule_name", "severity", "summary", "score"})
+                        for a in created[:5]
+                    ],
+                }
+            )
         return IngestResult(
             stored=len(events), alerts_created=len(outcome.created), alerts_updated=len(outcome.updated), **counts
         )

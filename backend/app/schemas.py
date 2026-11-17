@@ -260,3 +260,33 @@ class NotificationTest(BaseModel):
     delivered: bool
     status: int | None
     error: str | None
+
+
+class CoverageRule(BaseModel):
+    id: str
+    name: str
+    severity: Severity
+    enabled: bool
+
+
+class CoverageTechnique(BaseModel):
+    id: str
+    name: str
+    covered: bool
+    rules: list[CoverageRule]
+    alert_count: int
+    active_alerts: int
+
+
+class CoverageTactic(BaseModel):
+    id: str
+    name: str
+    techniques: list[CoverageTechnique]
+
+
+class Coverage(BaseModel):
+    tactics: list[CoverageTactic]
+    techniques_covered: int
+    rules_total: int
+    rules_enabled: int
+    rules_untagged: list[str]  # rules with no MITRE tag, so they cannot be placed on the map

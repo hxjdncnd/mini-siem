@@ -2,6 +2,7 @@ import type {
   Alert,
   AlertDetail,
   AlertUpdate,
+  Coverage,
   Health,
   IngestResult,
   IpProfile,
@@ -165,6 +166,23 @@ export const api = {
   /** Dry run: what the rule would raise over the stored events. Changes nothing. */
   testRule: (id: string, signal?: AbortSignal) =>
     request<RuleTestResult>(`${BASE}/rules/${encodeURIComponent(id)}/test`, { method: "POST" }, signal),
+  coverage: (signal?: AbortSignal) => get<Coverage>("/coverage", {}, signal),
+  /** Opens the live feed. fetch rather than EventSource, because only fetch can send the API key header. */
+  openStream: async (signal: AbortSignal): Promise<ReadableStream<Uint8Array>> => {
+    const headers = new Headers({ Accept: "text/event-stream" });
+    const key = getApiKey();
+    if (key) headers.set("X-API-Key", key);
+    let response: Response;
+    try {
+      response = await fetch(`${BASE}/stream`, { headers, signal });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") throw error;
+      throw new ApiError(0, "Cannot reach the API. Is the backend running on port 8000?");
+    }
+    if (!response.ok) throw await failure(response);
+    if (!response.body) throw new ApiError(0, "This browser cannot stream responses.");
+    return response.body;
+  },
   notifications: (signal?: AbortSignal) => get<NotificationStatus>("/notifications", {}, signal),
   testNotification: () => request<NotificationTest>(`${BASE}/notifications/test`, { method: "POST" }),
   downloadCsv: (path: "/alerts/export.csv" | "/events/export.csv", params: Params, signal?: AbortSignal) =>
