@@ -105,6 +105,21 @@ curl -X POST --data-binary @samples/auth.log -H "Content-Type: text/plain" \
      http://localhost:8000/api/v1/ingest/sshd
 ```
 
+## Try it without installing
+
+The dashboard also builds as a static demo that needs no backend. It replays a recorded simulator run in the
+browser (`frontend/src/demo`): you can triage alerts, switch rules off and dry-run them, open an IP, browse the
+ATT&CK coverage map, export CSV and watch simulated attacks arrive on the live feed. Uploading logs is the one thing
+it cannot do, because that needs the real parsers.
+
+```bash
+cd frontend && npm run build:demo     # writes frontend/dist-demo
+python frontend/scripts/capture_demo.py http://localhost:8000/api/v1   # refresh the recording from a running instance
+```
+
+`.github/workflows/pages.yml` publishes it to GitHub Pages on every push to `main` that touches `frontend/`
+(set Settings > Pages > Source to GitHub Actions once).
+
 ## Dashboard
 
 The dashboard lives in `frontend/` (React, TypeScript, Vite). With the backend running on port 8000:

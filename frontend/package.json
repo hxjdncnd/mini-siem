@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "build:demo": "tsc --noEmit && VITE_DEMO=1 vite build --base ./ --outDir dist-demo",
     "test": "vitest run"
   },
   "dependencies": {
